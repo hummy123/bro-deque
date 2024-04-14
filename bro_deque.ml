@@ -3,6 +3,7 @@ module type BRO_DEQUE = sig
 
   val empty : 'a t
   val singleton : 'a -> 'a t
+  val of_array : 'a array -> 'a t
   val is_empty : 'a t -> bool
   val size : 'a t -> int
   val cons : 'a -> 'a t -> 'a t
@@ -362,6 +363,7 @@ module BroDeque : BRO_DEQUE = struct
 
   let empty = { head = [||]; tail = [||]; body = N0 [||] }
   let singleton x = { head = [| x |]; tail = [||]; body = N0 [||] }
+  let of_array x = { head = x; tail = [||]; body = N0 [||] }
   let is_empty dq = Array.length dq.head = 0 && Array.length dq.tail = 0
   let size dq = size_body dq.body + Array.length dq.head + Array.length dq.tail
 
