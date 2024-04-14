@@ -212,59 +212,6 @@ module BroDeque : BRO_DEQUE = struct
   (* Appends an array to the body and calls the relevant root-balancing function. *)
   let snoc_body arr body = snoc_body_internal arr body |> ins_root
 
-  (* Removes the front element from the body, or does nothing if the body is empty. *)
-  let rec remove_front_body_internal = function
-    | N0 arr as node ->
-        if Array.length arr > 0 then N0 (Array.sub arr 1 (Array.length arr - 1))
-        else
-          (* If there is nothing to remove, then simply don't remove anything. *)
-          node
-    | N1 t ->
-        let t = remove_front_body_internal t in
-        N1 t
-    | N2 (l, _, _, r) ->
-        let l = remove_front_body_internal l in
-        del_n2_left l r
-    | _ -> failwith "bro_deque remove_front_body_internal aux constructor"
-
-  (* Removes the front element from the body if body is not empty,
-     calling the relevant root-balancing function. *)
-  let remove_front_body body = remove_front_body_internal body |> del_root
-
-  (* Removes the front element from the body, or does nothing if the body is empty. *)
-  let rec remove_back_body_internal = function
-    | N0 arr as node ->
-        if Array.length arr > 0 then N0 (Array.sub arr 0 (Array.length arr - 1))
-        else (* Do nothing if there are no elements to remove. *)
-          node
-    | N1 t ->
-        let t = remove_back_body_internal t in
-        N1 t
-    | N2 (l, _, _, r) ->
-        let r = remove_back_body_internal r in
-        del_n2_right l r
-    | _ -> failwith "bro_deque remove_back_body_internal aux constructor"
-
-  (* Removes the front element from the body if body is not empty,
-     calling the relevant root-balancing function. *)
-  let remove_back_body body = remove_back_body_internal body |> del_root
-
-  let rec front_body = function
-    | N0 arr ->
-        if Array.length arr > 0 then Some (Array.unsafe_get arr 0) else None
-    | N1 t -> front_body t
-    | N2 (l, _, _, _) -> front_body l
-    | _ -> failwith "bro_deque front_body aux constructor"
-
-  let rec back_body = function
-    | N0 arr ->
-        if Array.length arr > 0 then
-          Some (Array.unsafe_get arr (Array.length arr - 1))
-        else None
-    | N1 t -> back_body t
-    | N2 (_, _, _, r) -> back_body r
-    | _ -> failwith "bro_deque back_body aux constructor"
-
   let rec get_at_body idx = function
     | N0 arr ->
         if idx >= 0 && idx < Array.length arr then
