@@ -8,14 +8,18 @@ module type BRO_DEQUE = sig
   val size : 'a t -> int
   val cons : 'a -> 'a t -> 'a t
   val cons_many : 'a array -> 'a t -> 'a t
+  val cons_deque : 'a t -> 'a t -> 'a t
   val snoc : 'a -> 'a t -> 'a t
   val snoc_many : 'a array -> 'a t -> 'a t
+  val snoc_deque : 'a t -> 'a t -> 'a t
   val front : 'a t -> 'a option
   val back : 'a t -> 'a option
   val remove_front : 'a t -> 'a t
   val remove_back : 'a t -> 'a t
   val get_at : int -> 'a t -> 'a option
   val insert_at : int -> 'a -> 'a t -> 'a t
+  val insert_many_at : int -> 'a array -> 'a t -> 'a t
+  val insert_deque_at : 'a t -> int -> 'a t -> 'a t
   val remove_at : int -> 'a t -> 'a t
   val map : ('a -> 'b) -> 'a t -> 'b t
   val fold_left : ('acc -> 'a -> 'acc) -> 'acc -> 'a t -> 'acc
@@ -50,11 +54,16 @@ module BroDeque : BRO_DEQUE = struct
     | L2 of 'a array * 'a array
     | N3 of 'a body * 'a body * 'a body
 
-  (* The target_length specifies the maximum number of items allowed in an array,
-     and 32 seems like a good choice as this is also the number used in both
-     Clojure's persistent vector and in Relaxed Radix Balanced Trees. *)
+  (*
+    The target_length specifies the maximum number of items allowed in an array,
+    and 32 seems like a good choice as this is also the number used in both
+    Clojure's persistent vector and in Relaxed Radix Balanced Trees.
+  *)
   let target_length = 32
 
+  (*
+    Standard fold functions on trees which apply each element to the given function.
+   *)
   let rec fold_left_body f acc = function
     | N2 (l, _, _, r) ->
         let acc = fold_left_body f acc l in
@@ -70,6 +79,27 @@ module BroDeque : BRO_DEQUE = struct
     | N1 t -> fold_right_body f acc t
     | N0 arr -> Array.fold_right f arr acc
     | _ -> failwith "bro_deque fold_right: aux constructor"
+
+  (*
+      These two fold functions below are similar to the fold functions above, 
+      except that the whole array of each node is applied to the given function,
+      instead of each element of the array.
+   *)
+  let rec fold_left_body_array f acc = function
+    | N2 (l, _, _, r) ->
+        let acc = fold_left_body_array f acc l in
+        fold_left_body_array f acc r
+    | N1 t -> fold_left_body_array f acc t
+    | N0 arr -> f acc arr
+    | _ -> failwith "bro_deque fold_left_body_array: aux constructor"
+
+  let rec fold_right_body_array f acc = function
+    | N2 (l, _, _, r) ->
+        let acc = fold_right_body_array f acc r in
+        fold_right_body_array f acc l
+    | N1 t -> fold_right_body_array f acc t
+    | N0 arr -> f arr acc
+    | _ -> failwith "bro_deque fold_right_body_array: aux constructor"
 
   let rec map_body f = function
     | N0 arr ->
@@ -91,7 +121,7 @@ module BroDeque : BRO_DEQUE = struct
     | N0 arr -> Array.length arr
     | N1 t -> size_body t
     | N2 (_, lm, rm, _) -> lm + rm
-    (* I believe the size function is never called on the aux constructures. *)
+    (* The size function is never called on the aux constructures but the implementation is trivial anyway. *)
     | N3 (t1, t2, t3) -> size_body t1 + size_body t2 + size_body t3
     | L2 (a1, a2) -> Array.length a1 + Array.length a2
 
@@ -539,18 +569,18 @@ module BroDeque : BRO_DEQUE = struct
     but if neither is, then insert the current element into the body 
     as an array containing just one element.
    *)
-  let insert_when_head_is_too_large sub1 el sub2 dq =
-    if Array.length sub1 + 1 < target_length then
+  let insert_when_head_is_too_large sub1 arr sub2 dq =
+    if Array.length sub1 + Array.length arr < target_length then
       let body = cons_body sub2 dq.body in
-      let head = Array.append sub1 [| el |] in
+      let head = Array.append sub1 arr in
       { dq with head; body }
-    else if Array.length sub2 + 1 < target_length then
-      let sub2 = Array.append [| el |] sub2 in
+    else if Array.length sub2 + Array.length arr < target_length then
+      let sub2 = Array.append arr sub2 in
       let body = cons_body sub2 dq.body in
       { dq with head = sub1; body }
     else
       let body = cons_body sub2 dq.body in
-      let body = cons_body [| el |] body in
+      let body = cons_body arr body in
       { dq with head = sub1; body }
 
   (*
@@ -558,30 +588,31 @@ module BroDeque : BRO_DEQUE = struct
       It handles the simple and common case when the array is less than target_length,
       and calls another function to insert when the array is not less than that.
   *)
-  let insert_into_head idx el dq =
+  let insert_into_head idx arr dq =
     let sub1 = Array.sub dq.head 0 idx in
     let sub2_len = Array.length dq.head - idx in
     let sub2 = Array.sub dq.head idx sub2_len in
-    if Array.length sub1 + Array.length sub2 + 1 < target_length then
-      let head = Array.concat [ sub1; [| el |]; sub2 ] in
+    if Array.length sub1 + Array.length sub2 + Array.length arr < target_length
+    then
+      let head = Array.concat [ sub1; arr; sub2 ] in
       { dq with head }
-    else insert_when_head_is_too_large sub1 el sub2 dq
+    else insert_when_head_is_too_large sub1 arr sub2 dq
 
   (*
       Same as insert_when_head_is_too_large function except it deals with the tail.
    *)
-  let insert_when_tail_is_too_large sub1 el sub2 dq =
-    if Array.length sub1 + 1 < target_length then
+  let insert_when_tail_is_too_large sub1 arr sub2 dq =
+    if Array.length sub1 + Array.length arr < target_length then
       let body = snoc_body sub2 dq.body in
-      let tail = Array.append sub1 [| el |] in
+      let tail = Array.append sub1 arr in
       { dq with tail; body }
-    else if Array.length sub2 + 1 < target_length then
-      let sub2 = Array.append [| el |] sub2 in
+    else if Array.length sub2 + Array.length arr < target_length then
+      let sub2 = Array.append arr sub2 in
       let body = snoc_body sub2 dq.body in
       { dq with tail = sub1; body }
     else
       let body = snoc_body sub2 dq.body in
-      let body = snoc_body [| el |] body in
+      let body = snoc_body arr body in
       { dq with tail = sub1; body }
 
   (*
@@ -595,32 +626,34 @@ module BroDeque : BRO_DEQUE = struct
     When we want to index into the tail, we subtract head_length and body_length from the index
     and that will give us an appropriate offset we can use for the tail.
   *)
-  let insert_into_tail before_tail idx el dq =
+  let insert_into_tail before_tail idx arr dq =
     let idx = idx - before_tail in
     let sub1 = Array.sub dq.tail 0 idx in
     let sub2_len = Array.length dq.tail - idx in
     let sub2 = Array.sub dq.tail idx sub2_len in
-    if Array.length sub1 + Array.length sub2 + 1 < target_length then
-      let tail = Array.concat [ sub1; [| el |]; sub2 ] in
+    if Array.length sub1 + Array.length sub2 + Array.length arr < target_length
+    then
+      let tail = Array.concat [ sub1; arr; sub2 ] in
       { dq with tail }
-    else insert_when_tail_is_too_large sub1 el sub2 dq
+    else insert_when_tail_is_too_large sub1 arr sub2 dq
 
-  (* Inserts an element at any location in the deque. *)
-  let insert_at idx el dq =
-    if idx <= 0 then cons el dq
-    else if idx < Array.length dq.head then insert_into_head idx el dq
+  (* Inserts an array of elements at any location in the deque. *)
+  let insert_many_at idx arr dq =
+    if idx <= 0 then cons_many arr dq
+    else if idx < Array.length dq.head then insert_into_head idx arr dq
     else
       let body_size = size_body dq.body in
       let before_tail = body_size + Array.length dq.head in
       if idx < before_tail then
-        let body =
-          insert_at_body (idx - Array.length dq.head) [| el |] dq.body
-        in
+        let body = insert_at_body (idx - Array.length dq.head) arr dq.body in
         { dq with body }
       else
         let after_tail = before_tail + Array.length dq.tail in
-        if idx >= after_tail then snoc el dq
-        else insert_into_tail before_tail idx el dq
+        if idx >= after_tail then snoc_many arr dq
+        else insert_into_tail before_tail idx arr dq
+
+  (* Inserts an element at any location in the deque. *)
+  let insert_at idx el dq = insert_many_at idx [| el |] dq
 
   (*
     Removes the element at the index in the head.
@@ -697,4 +730,27 @@ module BroDeque : BRO_DEQUE = struct
     let acc = Array.fold_right f dq.tail acc in
     let acc = fold_right_body f acc dq.body in
     Array.fold_right f dq.head acc
+
+  let fold_left_array f acc dq =
+    let acc = f acc dq.head in
+    let acc = fold_left_body_array f acc dq.body in
+    f acc dq.tail
+
+  let fold_right_array f acc dq =
+    let acc = f dq.tail acc in
+    let acc = fold_right_body_array f acc dq.body in
+    f dq.head acc
+
+  let insert_deque_at_folder (dq, idx) arr =
+    let dq = insert_many_at idx arr dq in
+    let idx = idx + Array.length arr in
+    (dq, idx)
+
+  let insert_deque_at src idx dst =
+    let dq, _ = fold_left_array insert_deque_at_folder (dst, idx) src in
+    dq
+
+  let cons_deque src dst = fold_right_array cons_many dst src
+  let snoc_deque_folder dst arr = snoc_many arr dst
+  let snoc_deque src dst = fold_left_array snoc_deque_folder src dst
 end
