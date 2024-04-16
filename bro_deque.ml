@@ -683,28 +683,18 @@ module BroDeque : BRO_DEQUE = struct
 
       Else, snoc the current tail to the body and set the new element as the tail.
   *)
-  let snoc el dq =
-    if Array.length dq.tail < target_length then
-      let tail = Array.append dq.tail [| el |] in
-      { dq with tail }
-    else if is_body_empty dq.body && Array.length dq.head = 0 then
-      let head = dq.tail in
-      { dq with tail = [| el |]; head }
-    else
-      let body = snoc_body dq.tail dq.body in
-      let tail = [| el |] in
-      { dq with body; tail }
-
   let snoc_many arr dq =
     if is_less_than_target dq.tail arr then
       let tail = Array.append dq.tail arr in
       { dq with tail }
-    else if is_body_empty dq.body && Array.length dq.head = 0 then
-      let head = dq.tail in
+    else if is_body_empty dq.body && is_less_than_target dq.head dq.tail then
+      let head = Array.append dq.head dq.tail in
       { dq with tail = arr; head }
     else
       let body = snoc_body dq.tail dq.body in
       { dq with body; tail = arr }
+
+  let snoc el dq = snoc_many [| el |] dq
 
   (*
       Access to the front or back is simple.
