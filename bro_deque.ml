@@ -23,7 +23,7 @@ module type BRO_DEQUE = sig
       Note: good performance of cons/snoc/insert/removal operations
       depends on the initial array not being too large,
       although lookup is slightly faster with a large array.
-      A good maximum size and the one used internally is a 32-element array.
+      A good maximum size and the one used internally is a 192-element array.
 
       Time complexity: O(1).
   *)
@@ -61,7 +61,7 @@ module type BRO_DEQUE = sig
 
     Returns a new deque with an array of elements added to the start.
     As with Deque.of_array, good performance of subsequent insertions/removals
-    depends on the size of the array being inserted. A 32 element array is a good limit.
+    depends on the size of the array being inserted. A 192 element array is a good limit.
 
     Time complexity: O(log n) worst case.
    *)
@@ -73,7 +73,7 @@ module type BRO_DEQUE = sig
     Returns a new deque with the elements in src added to the start of dst.
 
     Time complexity: O(n log m) where n is the number of nodes in src and m is the number of nodes in dst.
-    In practice, this could be quite fast, because the whole array in each node (likely containing 32 elements)
+    In practice, this could be quite fast, because the whole array in each node (likely containing 192 elements)
     is inserted at once instead of each element being inserted individually. 
    *)
 
@@ -293,11 +293,14 @@ module BroDeque : BRO_DEQUE = struct
     | N3 of 'a body * 'a body * 'a body
 
   (*
-    The target_length specifies the maximum number of items allowed in an array,
-    and 32 seems like a good choice as this is also the number used in both
-    Clojure's persistent vector and in Relaxed Radix Balanced Trees.
+    The target_length specifies the maximum number of items allowed in an array.
+    From benchmarking, 192 seems like a good number (lower numbers are slower),
+    but this might possibly depend on the data structure contained within the array.
   *)
-  let target_length = 32
+  let target_length = 192
+
+  let is_less_than_target arr1 arr2 =
+    Array.length arr1 + Array.length arr2 < target_length
 
   (*
     Standard fold functions on trees which apply each element to the given function.
@@ -352,8 +355,6 @@ module BroDeque : BRO_DEQUE = struct
         N2 (l, lm, rm, r)
     | _ -> failwith "bro_deque map: aux constructor"
 
-  let is_body_empty = function N0 arr -> Array.length arr = 0 | _ -> false
-
   (* Returns the number of elements in the given tree/subtree. *)
   let rec size_body = function
     | N0 arr -> Array.length arr
@@ -363,70 +364,76 @@ module BroDeque : BRO_DEQUE = struct
     | N3 (t1, t2, t3) -> size_body t1 + size_body t2 + size_body t3
     | L2 (a1, a2) -> Array.length a1 + Array.length a2
 
+  let is_body_empty = function N0 arr -> Array.length arr = 0 | _ -> false
+  let make_n2 l r = N2 (l, size_body l, size_body r, r)
+
   (* Standard balancing function when inserting into the left on a 1-2 Brother Tree. 
    * The only difference is that the size_body function is used to maintain internal node metadata. *)
   let ins_n2_left l r =
     match (l, r) with
     | L2 (a1, a2), t3 -> N3 (N0 a1, N0 a2, t3)
     | N3 (t1, t2, t3), N1 t4 ->
-        let left = N2 (t1, size_body t1, size_body t2, t2) in
-        let right = N2 (t3, size_body t3, size_body t4, t4) in
-        N2 (left, size_body left, size_body right, right)
+        let left = make_n2 t1 t2 in
+        let right = make_n2 t3 t4 in
+        make_n2 left right
     | N3 (t1, t2, t3), t4 ->
-        let left = N2 (t1, size_body t1, size_body t2, t2) in
+        let left = make_n2 t1 t2 in
         N3 (left, N1 t3, t4)
-    | l, r -> N2 (l, size_body l, size_body r, r)
+    | l, r -> make_n2 l r
 
   (* Standard balancing function when deleting from the left on a 1-2 Brother Tree.
    * The only difference is that the size_body is used to maintain internal node metadata. *)
   let del_n2_left l r =
     match (l, r) with
-    | N1 t1, N1 t2 -> N1 (N2 (t1, size_body t1, size_body t2, t2))
-    | N1 (N1 t1), N2 (N1 t2, _, _, (N2 _ as t3)) ->
-        let left = N2 (t1, size_body t1, size_body t2, t2) in
-        let inner = N2 (left, size_body left, size_body t3, t3) in
+    | N1 t1, N1 t2 -> N1 (make_n2 t1 t2)
+    | N1 (N1 t1), N2 (N1 t2, _, _, N2 (t3, _, _, t4)) ->
+        let left = make_n2 t1 t2 in
+        let right = make_n2 t3 t4 in
+        let inner = make_n2 left right in
         N1 inner
     | N1 (N1 t1), N2 (N2 (t2, _, _, t3), _, _, N1 t4) ->
-        let left = N2 (t1, size_body t1, size_body t2, t2) in
-        let right = N2 (t3, size_body t3, size_body t4, t4) in
-        let inner = N2 (left, size_body left, size_body right, right) in
+        let left = make_n2 t1 t2 in
+        let right = make_n2 t3 t4 in
+        let inner = make_n2 left right in
         N1 inner
-    | N1 (N1 _ as t1), N2 ((N2 _ as t2), _, _, (N2 _ as t3)) ->
-        let left = N2 (t1, size_body t1, size_body t2, t2) in
-        let right = N1 t3 in
-        N2 (left, size_body left, size_body t3, right)
-    | l, r -> N2 (l, size_body l, size_body r, r)
+    | N1 (N1 t1), N2 (N2 (t2, _, _, t3), _, _, N2 (t4, _, _, t5)) ->
+        let left_right = make_n2 t2 t3 in
+        let left = make_n2 (N1 t1) left_right in
+        let right = make_n2 t4 t5 in
+        let right = N1 right in
+        make_n2 left right
+    | l, r -> make_n2 l r
 
   (* Standard balancing function when inserting into the right on a 1-2 Brother Tree. *)
   let ins_n2_right l r =
     match (l, r) with
     | t1, L2 (a1, a2) -> N3 (t1, N0 a1, N0 a2)
     | N1 t1, N3 (t2, t3, t4) ->
-        let left = N2 (t1, size_body t1, size_body t2, t2) in
-        let right = N2 (t3, size_body t3, size_body t4, t4) in
-        N2 (left, size_body left, size_body right, right)
+        let left = make_n2 t1 t2 in
+        let right = make_n2 t3 t4 in
+        make_n2 left right
     | t1, N3 (t2, t3, t4) ->
-        let right = N2 (t3, size_body t3, size_body t4, t4) in
+        let right = make_n2 t3 t4 in
         N3 (t1, N1 t2, right)
-    | l, r -> N2 (l, size_body l, size_body r, r)
+    | l, r -> make_n2 l r
 
   (* Standard balancing function when deleting from the right on a 1-2 Brother Tree. *)
   let del_n2_right l r =
     match (l, r) with
     | N2 (N1 t1, _, _, N2 (t2, _, _, t3)), N1 (N1 t4) ->
-        let left = N2 (t1, size_body t1, size_body t2, t2) in
-        let right = N2 (t3, size_body t3, size_body t4, t4) in
-        let inner = N2 (left, size_body left, size_body right, right) in
+        let left = make_n2 t1 t2 in
+        let right = make_n2 t3 t4 in
+        let inner = make_n2 left right in
         N1 inner
     | N2 ((N2 _ as t1), _, _, N1 t2), N1 (N1 t3) ->
-        let right = N2 (t2, size_body t2, size_body t3, t3) in
-        let inner = N2 (t1, size_body t1, size_body right, right) in
+        let right = make_n2 t2 t3 in
+        let inner = make_n2 t1 right in
         N1 inner
     | N2 ((N2 _ as t1), _, _, (N2 _ as t2)), N1 (N1 _ as t3) ->
         let left = N1 t1 in
-        let right = N2 (t2, size_body t2, size_body t3, t3) in
-        N2 (left, size_body left, size_body right, right)
-    | l, r -> N2 (l, size_body l, size_body r, r)
+        let right = make_n2 t2 t3 in
+        make_n2 left right
+    | l, r -> make_n2 l r
 
   (* Balancing function called when deleting a node. *)
   let del_root = function N1 t -> t | t -> t
@@ -435,23 +442,22 @@ module BroDeque : BRO_DEQUE = struct
   let ins_root = function
     | L2 (a1, a2) -> N2 (N0 a1, Array.length a1, Array.length a2, N0 a2)
     | N3 (t1, t2, t3) ->
-        let left = N2 (t1, size_body t1, size_body t2, t2) in
-        N2 (left, size_body left, size_body t3, t3)
+        let left = make_n2 t1 t2 in
+        make_n2 left (N1 t3)
     | t -> t
 
   (* Smart constructor for 1-2 Brother trees when inserting in the N1 case. *)
   let ins_n1 = function
     | L2 (a1, a2) -> N2 (N0 a1, Array.length a1, Array.length a2, N0 a2)
     | N3 (t1, t2, t3) ->
-        let left = N2 (t1, size_body t1, size_body t2, t2) in
-        N2 (left, size_body left, size_body t3, t3)
+        let left = make_n2 t1 t2 in
+        make_n2 left (N1 t3)
     | t -> N1 t
 
   (* Prepends an array to the body, calling relevant balancing functions if needed. *)
   let rec cons_body_internal new_arr = function
     | N0 arr ->
-        if Array.length new_arr + Array.length arr < target_length then
-          N0 (Array.append new_arr arr)
+        if is_less_than_target new_arr arr then N0 (Array.append new_arr arr)
         else L2 (new_arr, arr)
     | N1 t ->
         let t = cons_body_internal new_arr t in
@@ -495,9 +501,6 @@ module BroDeque : BRO_DEQUE = struct
            recurse to the right subtree. *)
         if lm > idx then get_at_body idx l else get_at_body (idx - lm) r
     | _ -> failwith "bro_deque get_at_body aux constructor"
-
-  let is_less_than_target arr1 arr2 =
-    Array.length arr1 + Array.length arr2 < target_length
 
   let rec insert_at_body_internal idx new_arr = function
     | N0 old_arr ->
@@ -585,9 +588,13 @@ module BroDeque : BRO_DEQUE = struct
     | N1 t ->
         let t, arr = pop_body_start_internal t in
         (N1 t, arr)
-    | N2 (l, _, _, r) ->
-        let l, arr = pop_body_start_internal l in
-        (del_n2_left l r, arr)
+    | N2 (l, lm, _, r) ->
+        if lm > 0 then
+          let l, arr = pop_body_start_internal l in
+          (del_n2_left l r, arr)
+        else
+          let r, arr = pop_body_start_internal r in
+          (del_n2_left l r, arr)
     | _ -> failwith "bro_deque pop_body_start_internal aux constructor"
 
   let pop_body_start body =
@@ -600,9 +607,13 @@ module BroDeque : BRO_DEQUE = struct
     | N1 t ->
         let t, arr = pop_body_end_internal t in
         (N1 t, arr)
-    | N2 (l, _, _, r) ->
-        let r, arr = pop_body_end_internal r in
-        (del_n2_right l r, arr)
+    | N2 (l, _, rm, r) ->
+        if rm > 0 then
+          let r, arr = pop_body_end_internal r in
+          (del_n2_right l r, arr)
+        else
+          let l, arr = pop_body_end_internal l in
+          (del_n2_left l r, arr)
     | _ -> failwith "bro_deque pop_body_end_internal aux constructor"
 
   let pop_body_end body =
@@ -615,7 +626,7 @@ module BroDeque : BRO_DEQUE = struct
    * and the data structure behind Clojure vectors gives a clue on how to do this. 
 
    * Clojure's persistent vector is an append-only data structure with a temporary "tail" array 
-   * which is separete from the tree structure. When the tail is full (has 32 elements), 
+   * which is separete from the tree structure. When the tail is full (has 192 elements), 
    * it is appended to the tree and an empty array becomes the new tail. 
 
    * This deque works exactly the same way, except thaat it has a head array too
@@ -648,28 +659,18 @@ module BroDeque : BRO_DEQUE = struct
 
       Else, cons the old head to the body and set the new element as the head.
   *)
-  let cons el dq =
-    if Array.length dq.head < target_length then
-      let head = Array.append [| el |] dq.head in
-      { dq with head }
-    else if is_body_empty dq.body && Array.length dq.tail = 0 then
-      let tail = dq.head in
-      { dq with head = [| el |]; tail }
-    else
-      let body = cons_body dq.head dq.body in
-      let head = [| el |] in
-      { dq with head; body }
-
   let cons_many arr dq =
     if is_less_than_target dq.head arr then
       let head = Array.append arr dq.head in
       { dq with head }
-    else if is_body_empty dq.body && Array.length dq.tail = 0 then
-      let tail = dq.head in
+    else if is_body_empty dq.body && is_less_than_target dq.head dq.tail then
+      let tail = Array.append dq.head dq.tail in
       { dq with head = arr; tail }
     else
       let body = cons_body dq.head dq.body in
       { dq with body; head = arr }
+
+  let cons el dq = cons_many [| el |] dq
 
   (*
       The logic for snoc is the inverse of the logic for cons.
