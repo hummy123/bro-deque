@@ -1,33 +1,267 @@
 module type BRO_DEQUE = sig
   type 'a t
+  (* The type of polymorphic deques. *)
 
   val empty : 'a t
+  (* The empty deque. *)
+
   val singleton : 'a -> 'a t
+  (*
+      BroDeque.singleton el
+
+      Returns a new deque with a single element in it.
+
+      Time complexity: O(1).
+  *)
+
   val of_array : 'a array -> 'a t
+  (*
+      BroDeque.of_array arr
+
+      Returns a new deque holding the given array.
+
+      Note: good performance of cons/snoc/insert/removal operations
+      depends on the initial array not being too large,
+      although lookup is slightly faster with a large array.
+      A good maximum size and the one used internally is a 32-element array.
+
+      Time complexity: O(1).
+  *)
+
   val is_empty : 'a t -> bool
+  (*
+      BroDeque.is_empty dq
+
+      Returns a boolean indicating whether the deque is empty.
+
+      Time complexity: O(1).
+  *)
+
   val size : 'a t -> int
+  (*
+      BroDeque.size dq
+
+      Returns the number of elements the deque holds.
+
+      Time complexity: O(1).
+  *)
+
   val cons : 'a -> 'a t -> 'a t
+  (*
+      BroDeque.cons el dq
+
+      Returns a new deque with the given element added to the start.
+
+      Time complexity: O(log n) worse case but often faster.
+  *)
+
   val cons_many : 'a array -> 'a t -> 'a t
+  (*
+    BroDeque.cons_many arr dq
+
+    Returns a new deque with an array of elements added to the start.
+    As with Deque.of_array, good performance of subsequent insertions/removals
+    depends on the size of the array being inserted. A 32 element array is a good limit.
+
+    Time complexity: O(log n) worst case.
+   *)
+
   val cons_deque : 'a t -> 'a t -> 'a t
+  (*
+    BroDeque.cons_deque src_dq dst_dq
+
+    Returns a new deque with the elements in src added to the start of dst.
+
+    Time complexity: O(n log m) where n is the number of nodes in src and m is the number of nodes in dst.
+    In practice, this could be quite fast, because the whole array in each node (likely containing 32 elements)
+    is inserted at once instead of each element being inserted individually. 
+   *)
+
   val snoc : 'a -> 'a t -> 'a t
+  (*
+    BroDeque.snoc el dq
+
+    Returns a new deque with the given element added to the end of dq.
+
+    Time complexity: O(log n) worst case but often faster.
+   *)
+
   val snoc_many : 'a array -> 'a t -> 'a t
+  (*
+    BroDeque.snoc_many arr dq
+
+    Returns a new deque with the given array added to the end of dq.
+    Like with cons_many, the size of the inserted array impacts subsequent performance.
+
+    Time complexity: O(log n) worst case.
+   *)
+
   val snoc_deque : 'a t -> 'a t -> 'a t
+  (*
+    BroDeque.snoc src dst
+    
+    Returns a new deque with the elements of src added to the end of dst.
+
+    Time complexity: O(n log m). Same performance note provided for cons_many applies here.
+   *)
+
   val front : 'a t -> 'a option
+  (*
+    BroDeque.front dq
+
+    Returns the first element of the deque, if any.
+
+    Time complexity: O(1).
+   *)
+
   val back : 'a t -> 'a option
+  (*
+    BroDeque.back dq
+
+    Returns the last element of the deque, if any.
+
+    Time complexity: O(1).
+   *)
+
   val remove_front : 'a t -> 'a t
+  (*
+    BroDeque.remove_front dq
+
+    Returns a new deque with the front element removed if the deque is not empty,
+    or else returns the empty deque if the given deque is already empty.
+
+    Time complexity: O(log n) worst case but often faster.
+   *)
+
   val remove_back : 'a t -> 'a t
+  (*
+    BroDeque.remove_back dq
+
+    Returns a new deque with the back element removed if the deque is not empty,
+    or else returns the empty deque if the given deque is already empty.
+
+    Time complexity: O(log n) worst case but often faster.
+   *)
+
   val take_front : 'a t -> ('a * 'a t) option
+  (*
+    BroDequq.take_front dq
+
+    If the deque is not empty, returns a tuple containing the front element,
+    and a new deque with the front element removed.
+
+    Time complexity: O(log n) worst case but often faster.
+   *)
+
   val take_back : 'a t -> ('a * 'a t) option
+  (*
+    BroDeque.take_back dq
+
+    If the deque is not empty, returns a tuple containing the back element,
+    and a new deque with the back element removed.
+
+    Time complexity: O(log n) worst case but often faster.
+   *)
+
   val get_at : int -> 'a t -> 'a option
+  (*
+    BroDeque.get_at index dq
+
+    Returns the element at the given index if the deque holds an element at that index.
+
+    Time complexity: O(log n) worst case.
+   *)
+
   val insert_at : int -> 'a -> 'a t -> 'a t
+  (*
+    BroDeque.insert_at idx el dq
+
+    Returns a new deque with the element inserted at the given index.
+
+    Time complexity: O(log n) worst case.
+   *)
+
   val insert_many_at : int -> 'a array -> 'a t -> 'a t
+  (*
+    BroDeque.insert_many_at idx arr dq
+
+    Returns a new deque with the array inserted at the given index.
+
+    Time complexity: O(log n) worst case. 
+    Note: The same comment about array size for BroDeque.cons_many applies here.
+   *)
+
   val insert_deque_at : 'a t -> int -> 'a t -> 'a t
+  (*
+    BroDeque.insert_deque_at src idx dst
+
+    Returns a new deque with the elements from src added to dst at the given index.
+
+    Time complexity: O(n log m).
+    Note: The same comment about performance for BroDeque.cons_deque applies here.
+   *)
+
   val remove_at : int -> 'a t -> 'a t
+  (*
+    BroDeque.remove_at idx dq
+
+    Returns a new deque with the element at idx removed.
+
+    Time complexity: O(log n) worst case.
+   *)
+
   val map : ('a -> 'b) -> 'a t -> 'b t
+  (*
+    BroDeque.map map_func dq
+
+    Returns a new deque where all the elements have had map_func applied to them.
+
+    Time complexity: O(n).
+   *)
+
   val fold_left : ('acc -> 'a -> 'acc) -> 'acc -> 'a t -> 'acc
+  (*
+    BroDeque.fold_left folder_func initial_state dq
+
+    Returns the result of applying folder_func to all elements in the deque,
+    starting the computation from the front of the deque and ending at the back of the deque,
+    threading an accumulator value at each stage.
+
+    Time complexity: O(n), where n is the number of elements.
+   *)
+
   val fold_left_array : ('acc -> 'a array -> 'acc) -> 'acc -> 'a t -> 'acc
+  (*
+    BroDeque.fold_left_array fold_array_func initial_state dq
+
+    Returns the result of applying fold_array_func to all arrays in the deque,
+    starting the computation from the front of the deque and ending at the back of the deque,
+    threading an accumulator value at each stage.
+
+    Time complexity: O(n) where n is the number of arrays in the deque.
+   *)
+
   val fold_right : ('a -> 'acc -> 'acc) -> 'acc -> 'a t -> 'acc
+  (*
+    BroDeque.fold_right folder_func initial_state dq
+
+    Returns the result of applying folder_func to all elements in the deque,
+    starting the computation from the back of the deque and ending at the front of the deque,
+    threading an accumulator value at each stage.
+
+    Time complexity: O(n), where n is the number of elements.
+   *)
+
   val fold_right_array : ('a array -> 'acc -> 'acc) -> 'acc -> 'a t -> 'acc
+  (*
+    BroDeque.fold_right_array fold_array_func initial_state dq
+
+    Returns the result of applying fold_array_func to all arrays in the deque,
+    starting the computation from the back of the deque and ending at the front of the deque,
+    threading an accumulator value at each stage.
+
+    Time complexity: O(n) where n is the number of arrays in the deque.
+   *)
 end
 
 module BroDeque : BRO_DEQUE = struct
