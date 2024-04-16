@@ -16,6 +16,8 @@ module type BRO_DEQUE = sig
   val back : 'a t -> 'a option
   val remove_front : 'a t -> 'a t
   val remove_back : 'a t -> 'a t
+  val take_front : 'a t -> ('a * 'a t) option
+  val take_back : 'a t -> ('a * 'a t) option
   val get_at : int -> 'a t -> 'a option
   val insert_at : int -> 'a -> 'a t -> 'a t
   val insert_many_at : int -> 'a array -> 'a t -> 'a t
@@ -23,7 +25,9 @@ module type BRO_DEQUE = sig
   val remove_at : int -> 'a t -> 'a t
   val map : ('a -> 'b) -> 'a t -> 'b t
   val fold_left : ('acc -> 'a -> 'acc) -> 'acc -> 'a t -> 'acc
+  val fold_left_array : ('acc -> 'a array -> 'acc) -> 'acc -> 'a t -> 'acc
   val fold_right : ('a -> 'acc -> 'acc) -> 'acc -> 'a t -> 'acc
+  val fold_right_array : ('a array -> 'acc -> 'acc) -> 'acc -> 'a t -> 'acc
 end
 
 module BroDeque : BRO_DEQUE = struct
@@ -753,4 +757,18 @@ module BroDeque : BRO_DEQUE = struct
   let cons_deque src dst = fold_right_array cons_many dst src
   let snoc_deque_folder dst arr = snoc_many arr dst
   let snoc_deque src dst = fold_left_array snoc_deque_folder src dst
+
+  let take_front dq =
+    match front dq with
+    | Some el ->
+        let dq = remove_front dq in
+        Some (el, dq)
+    | None -> None
+
+  let take_back dq =
+    match back dq with
+    | Some el ->
+        let dq = remove_back dq in
+        Some (el, dq)
+    | None -> None
 end
