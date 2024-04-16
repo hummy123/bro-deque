@@ -1,2 +1,3 @@
 (library
- (name brolib_ocaml))
+ (name brolib_ocaml)
+ (libraries ke))

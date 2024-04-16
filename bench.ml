@@ -78,6 +78,40 @@ let rec plib jeu1 jeu2 tas1 tas2 nb_plis =
             let tas2 = BroDeque.snoc_many [| c2; c22 |] tas2 in
             plib l11 l22 tas1 tas2 (nb_plis + 1))
 
+let fke_of_n lst =
+  let open Ke in
+  let rec loop lst fke =
+    match lst with
+    | [] -> fke
+    | x :: xs ->
+        let fke = Fke.push fke x in
+        loop xs fke
+  in
+  loop lst Fke.empty
+
+let rec plifke jeu1 jeu2 tas1 tas2 nb_plis =
+  let open Ke in
+  match (Fke.pop jeu1, Fke.pop jeu2) with
+  | None, _ | _, None -> nb_plis + 1
+  | Some (c1, l1), Some (c2, l2) -> (
+      if c1 > c2 then
+        let new_l1 = Fke.cons tas1 c2 in
+        let new_l1 = Fke.cons new_l1 c1 in
+        plifke new_l1 l2 Fke.empty Fke.empty (nb_plis + 1)
+      else if c2 > c1 then
+        let new_l2 = Fke.cons tas2 c1 in
+        let new_l2 = Fke.cons new_l2 c2 in
+        plifke l1 new_l2 Fke.empty Fke.empty (nb_plis + 1)
+      else
+        match (Fke.pop l1, Fke.pop l2) with
+        | None, _ | _, None -> nb_plis + 1
+        | Some (c11, l11), Some (c22, l22) ->
+            let tas1 = Fke.push tas1 c1 in
+            let tas1 = Fke.push tas1 c11 in
+            let tas2 = Fke.push tas2 c2 in
+            let tas2 = Fke.push tas2 c22 in
+            plifke l11 l22 tas1 tas2 (nb_plis + 1))
+
 let time_it f =
   let t = Sys.time () in
   f ();
@@ -87,15 +121,25 @@ let bench () =
   let n = 1000 in
   let jeu1 = rnd_jeu n in
   let jeu2 = rnd_jeu n in
+  print_string "list impl\n";
   time_it (fun () -> pli2 jeu1 jeu2 [] [] 0 |> print_int);
 
   let jeu1_q = queue_of_list jeu1 in
   let jeu2_q = queue_of_list jeu2 in
+  print_string "stdlib queue\n";
   time_it (fun () ->
       pliq jeu1_q jeu2_q (Queue.create ()) (Queue.create ()) |> print_int);
 
   let open Bro_deque in
-  let jeu1 = dq_of_n jeu1 in
-  let jeu2 = dq_of_n jeu2 in
+  let jeu1_bro = dq_of_n jeu1 in
+  let jeu2_bro = dq_of_n jeu2 in
+  print_string "brodeque\n";
   time_it (fun () ->
-      plib jeu1 jeu2 BroDeque.empty BroDeque.empty 0 |> print_int)
+      plib jeu1_bro jeu2_bro BroDeque.empty BroDeque.empty 0 |> print_int);
+
+  let open Ke in
+  let jeu1_fke = fke_of_n jeu1 in
+  let jeu2_fke = fke_of_n jeu2 in
+  print_string "fke\n";
+  time_it (fun () ->
+      plifke jeu1_fke jeu2_fke Fke.empty Fke.empty 0 |> print_int)
